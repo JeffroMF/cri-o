@@ -139,10 +139,8 @@ func CompleteSpec(ctx context.Context, r *libpod.Runtime, s *specgen.SpecGenerat
 	}
 	// First transform the os env into a map. We need it for the labels later in
 	// any case.
-	osEnv, err := envLib.ParseSlice(os.Environ())
-	if err != nil {
-		return nil, fmt.Errorf("error parsing host environment variables: %w", err)
-	}
+	osEnv := envLib.Map(os.Environ())
+
 	// Caller Specified defaults
 	if s.EnvHost {
 		defaultEnvs = envLib.Join(defaultEnvs, osEnv)
@@ -191,16 +189,24 @@ func CompleteSpec(ctx context.Context, r *libpod.Runtime, s *specgen.SpecGenerat
 	// - "container" denotes the container should join the VM of the SandboxID
 	//   (the infra container)
 	if len(s.Pod) > 0 {
-		annotations[ann.SandboxID] = s.Pod
+		p, err := r.LookupPod(s.Pod)
+		if err != nil {
+			return nil, err
+		}
+		sandboxID := p.ID()
+		if p.HasInfraContainer() {
+			infra, err := p.InfraContainer()
+			if err != nil {
+				return nil, err
+			}
+			sandboxID = infra.ID()
+		}
+		annotations[ann.SandboxID] = sandboxID
 		annotations[ann.ContainerType] = ann.ContainerTypeContainer
 		// Check if this is an init-ctr and if so, check if
 		// the pod is running.  we do not want to add init-ctrs to
 		// a running pod because it creates confusion for us.
 		if len(s.InitContainerType) > 0 {
-			p, err := r.LookupPod(s.Pod)
-			if err != nil {
-				return nil, err
-			}
 			containerStatuses, err := p.Status()
 			if err != nil {
 				return nil, err
@@ -392,9 +398,21 @@ func ConfigToSpec(rt *libpod.Runtime, specg *specgen.SpecGenerator, contaierID s
 	conf.Systemd = tmpSystemd
 	conf.Mounts = tmpMounts
 
-	if conf.Spec != nil && conf.Spec.Linux != nil && conf.Spec.Linux.Resources != nil {
-		if specg.ResourceLimits == nil {
-			specg.ResourceLimits = conf.Spec.Linux.Resources
+	if conf.Spec != nil {
+		if conf.Spec.Linux != nil && conf.Spec.Linux.Resources != nil {
+			if specg.ResourceLimits == nil {
+				specg.ResourceLimits = conf.Spec.Linux.Resources
+			}
+		}
+		if conf.Spec.Process != nil && conf.Spec.Process.Env != nil {
+			env := make(map[string]string)
+			for _, entry := range conf.Spec.Process.Env {
+				split := strings.Split(entry, "=")
+				if len(split) == 2 {
+					env[split[0]] = split[1]
+				}
+			}
+			specg.Env = env
 		}
 	}
 
