@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/containers/common/pkg/parse"
+	"github.com/containers/podman/v4/libpod/define"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -23,6 +24,9 @@ type NamedVolume struct {
 	Dest string
 	// Options are options that the named volume will be mounted with.
 	Options []string
+	// IsAnonymous sets the named volume as anonymous even if it has a name
+	// This is used for emptyDir volumes from a kube yaml
+	IsAnonymous bool
 }
 
 // OverlayVolume holds information about a overlay volume that will be mounted into
@@ -156,7 +160,7 @@ func GenVolumeMounts(volumeFlag []string) (map[string]spec.Mount, map[string]*Na
 			} else {
 				newMount := spec.Mount{
 					Destination: dest,
-					Type:        "bind",
+					Type:        define.TypeBind,
 					Source:      src,
 					Options:     options,
 				}

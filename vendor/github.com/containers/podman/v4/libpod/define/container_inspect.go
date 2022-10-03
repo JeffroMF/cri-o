@@ -55,6 +55,8 @@ type InspectContainerConfig struct {
 	StopSignal uint `json:"StopSignal"`
 	// Configured healthcheck for the container
 	Healthcheck *manifest.Schema2HealthConfig `json:"Healthcheck,omitempty"`
+	// HealthcheckOnFailureAction defines an action to take once the container turns unhealthy.
+	HealthcheckOnFailureAction string `json:"HealthcheckOnFailureAction,omitempty"`
 	// CreateCommand is the full command plus arguments of the process the
 	// container has been created with.
 	CreateCommand []string `json:"CreateCommand,omitempty"`
@@ -79,6 +81,10 @@ type InspectContainerConfig struct {
 	// treated as root directories. Standard bind mounts will be mounted
 	// into paths relative to these directories.
 	ChrootDirs []string `json:"ChrootDirs,omitempty"`
+	// SdNotifyMode is the sd-notify mode of the container.
+	SdNotifyMode string `json:"sdNotifyMode,omitempty"`
+	// SdNotifySocket is the NOTIFY_SOCKET in use by/configured for the container.
+	SdNotifySocket string `json:"sdNotifySocket,omitempty"`
 }
 
 // InspectRestartPolicy holds information about the container's restart policy.

@@ -9,11 +9,13 @@ import (
 	"github.com/containers/common/libimage"
 	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/image/v5/manifest"
+	"github.com/containers/podman/v4/libpod/define"
 	"github.com/containers/storage/types"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-//  LogConfig describes the logging characteristics for a container
+// LogConfig describes the logging characteristics for a container
+// swagger:model LogConfigLibpod
 type LogConfig struct {
 	// LogDriver is the container's log driver.
 	// Optional.
@@ -203,6 +205,9 @@ type ContainerBasicConfig struct {
 	// The execution domain system allows Linux to provide limited support
 	// for binaries compiled under other UNIX-like operating systems.
 	Personality *spec.LinuxPersonality `json:"personality,omitempty"`
+	// EnvMerge takes the specified environment variables from image and preprocess them before injecting them into the
+	// container.
+	EnvMerge []string `json:"envmerge,omitempty"`
 	// UnsetEnv unsets the specified default environment variables from the image or from buildin or containers.conf
 	// Optional.
 	UnsetEnv []string `json:"unsetenv,omitempty"`
@@ -529,7 +534,8 @@ type ContainerResourceConfig struct {
 // ContainerHealthCheckConfig describes a container healthcheck with attributes
 // like command, retries, interval, start period, and timeout.
 type ContainerHealthCheckConfig struct {
-	HealthConfig *manifest.Schema2HealthConfig `json:"healthconfig,omitempty"`
+	HealthConfig               *manifest.Schema2HealthConfig     `json:"healthconfig,omitempty"`
+	HealthCheckOnFailureAction define.HealthCheckOnFailureAction `json:"health_check_on_failure_action,omitempty"`
 }
 
 // SpecGenerator creates an OCI spec and Libpod configuration options to create

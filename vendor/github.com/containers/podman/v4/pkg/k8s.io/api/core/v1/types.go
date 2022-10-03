@@ -56,6 +56,12 @@ type VolumeSource struct {
 	// ConfigMap represents a configMap that should populate this volume
 	// +optional
 	ConfigMap *ConfigMapVolumeSource `json:"configMap,omitempty"`
+	// Secret represents a secret that should be mounted as a volume
+	Secret *SecretVolumeSource `json:"secret,omitempty"`
+	// emptyDir represents a temporary directory that shares a pod's lifetime.
+	// More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir
+	// +optional
+	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
 // PersistentVolumeClaimVolumeSource references the user's PVC in the same namespace.
@@ -1978,6 +1984,18 @@ type PodSpec struct {
 	// Default to false.
 	// +optional
 	SetHostnameAsFQDN *bool `json:"setHostnameAsFQDN,omitempty"`
+	// Use the host's user namespace.
+	// Optional: Default to true.
+	// If set to true or not present, the pod will be run in the host user namespace, useful
+	// for when the pod needs a feature only available to the host user namespace, such as
+	// loading a kernel module with CAP_SYS_MODULE.
+	// When set to false, a new userns is created for the pod. Setting false is useful for
+	// mitigating container breakout vulnerabilities even allowing users to run their
+	// containers as root without actually having root privileges on the host.
+	// This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature.
+	// +k8s:conversion-gen=false
+	// +optional
+	HostUsers *bool `json:"hostUsers,omitempty"`
 }
 
 type UnsatisfiableConstraintAction string

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/containers/podman/v4/libpod/events"
 	"github.com/containers/podman/v4/pkg/signal"
 	"github.com/containers/storage/pkg/archive"
+	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -96,6 +96,15 @@ func (c *Container) Start(ctx context.Context, recursive bool) error {
 
 	// Start the container
 	return c.start()
+}
+
+// Update updates the given container.
+// only the cgroup config can be updated and therefore only a linux resource spec is passed.
+func (c *Container) Update(res *spec.LinuxResources) error {
+	if err := c.syncContainer(); err != nil {
+		return err
+	}
+	return c.update(res)
 }
 
 // StartAndAttach starts a container and attaches to it.
@@ -469,7 +478,7 @@ func (c *Container) AddArtifact(name string, data []byte) error {
 		return define.ErrCtrRemoved
 	}
 
-	return ioutil.WriteFile(c.getArtifactPath(name), data, 0o740)
+	return os.WriteFile(c.getArtifactPath(name), data, 0o740)
 }
 
 // GetArtifact reads the specified artifact file from the container
@@ -478,7 +487,7 @@ func (c *Container) GetArtifact(name string) ([]byte, error) {
 		return nil, define.ErrCtrRemoved
 	}
 
-	return ioutil.ReadFile(c.getArtifactPath(name))
+	return os.ReadFile(c.getArtifactPath(name))
 }
 
 // RemoveArtifact deletes the specified artifacts file
@@ -674,7 +683,7 @@ func (c *Container) Cleanup(ctx context.Context) error {
 			// When the container has already been removed, the OCI runtime directory remain.
 			if errors.Is(err, define.ErrNoSuchCtr) || errors.Is(err, define.ErrCtrRemoved) {
 				if err := c.cleanupRuntime(ctx); err != nil {
-					return fmt.Errorf("error cleaning up container %s from OCI runtime: %w", c.ID(), err)
+					return fmt.Errorf("cleaning up container %s from OCI runtime: %w", c.ID(), err)
 				}
 				return nil
 			}

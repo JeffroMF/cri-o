@@ -16,7 +16,7 @@ import (
 func newPod(runtime *Runtime) *Pod {
 	pod := new(Pod)
 	pod.config = new(PodConfig)
-	pod.config.ID = stringid.GenerateNonCryptoID()
+	pod.config.ID = stringid.GenerateRandomID()
 	pod.config.Labels = make(map[string]string)
 	pod.config.CreatedTime = time.Now()
 	//	pod.config.InfraContainer = new(ContainerConfig)
@@ -38,7 +38,7 @@ func (p *Pod) updatePod() error {
 // Save pod state to database
 func (p *Pod) save() error {
 	if err := p.runtime.state.SavePod(p); err != nil {
-		return fmt.Errorf("error saving pod %s state: %w", p.ID(), err)
+		return fmt.Errorf("saving pod %s state: %w", p.ID(), err)
 	}
 
 	return nil
@@ -60,7 +60,7 @@ func (p *Pod) refresh() error {
 	// Retrieve the pod's lock
 	lock, err := p.runtime.lockManager.AllocateAndRetrieveLock(p.config.LockID)
 	if err != nil {
-		return fmt.Errorf("error retrieving lock %d for pod %s: %w", p.config.LockID, p.ID(), err)
+		return fmt.Errorf("retrieving lock %d for pod %s: %w", p.config.LockID, p.ID(), err)
 	}
 	p.lock = lock
 
