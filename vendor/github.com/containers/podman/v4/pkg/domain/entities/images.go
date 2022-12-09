@@ -94,6 +94,8 @@ type ImageRemoveOptions struct {
 	Ignore bool
 	// Confirms if given name is a manifest list and removes it, otherwise returns error.
 	LookupManifest bool
+	// NoPrune will not remove dangling images
+	NoPrune bool
 }
 
 // ImageRemoveReport is the response for removing one or more image(s) from storage
@@ -154,6 +156,8 @@ type ImagePullOptions struct {
 	SkipTLSVerify types.OptionalBool
 	// PullPolicy whether to pull new image
 	PullPolicy config.PullPolicy
+	// Writer is used to display copy information including progress bars.
+	Writer io.Writer
 }
 
 // ImagePullReport is the response from pulling one or more images.
@@ -205,6 +209,16 @@ type ImagePushOptions struct {
 	// SignBy adds a signature at the destination using the specified key.
 	// Ignored for remote calls.
 	SignBy string
+	// SignPassphrase, if non-empty, specifies a passphrase to use when signing
+	// with the key ID from SignBy.
+	SignPassphrase string
+	// SignBySigstorePrivateKeyFile, if non-empty, asks for a signature to be added
+	// during the copy, using a sigstore private key file at the provided path.
+	// Ignored for remote calls.
+	SignBySigstorePrivateKeyFile string
+	// SignSigstorePrivateKeyPassphrase is the passphrase to use when signing with
+	// SignBySigstorePrivateKeyFile.
+	SignSigstorePrivateKeyPassphrase []byte
 	// SkipTLSVerify to skip HTTPS and certificate verification.
 	SkipTLSVerify types.OptionalBool
 	// Progress to get progress notifications
@@ -321,7 +335,8 @@ type ImageSaveOptions struct {
 	// Output - write image to the specified path.
 	Output string
 	// Quiet - suppress output when copying images
-	Quiet bool
+	Quiet           bool
+	SignaturePolicy string
 }
 
 // ImageScpOptions provide options for securely copying images to and from a remote host
