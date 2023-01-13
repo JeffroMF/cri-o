@@ -16,9 +16,12 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/containers/buildah/define"
+	securejoin "github.com/cyphar/filepath-securejoin"
 	internalParse "github.com/containers/buildah/internal/parse"
 	"github.com/containers/buildah/pkg/sshagent"
+	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/parse"
+	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/unshare"
@@ -34,9 +37,9 @@ import (
 
 const (
 	// SeccompDefaultPath defines the default seccomp path
-	SeccompDefaultPath = "/usr/share/containers/seccomp.json"
+	SeccompDefaultPath = config.SeccompDefaultPath
 	// SeccompOverridePath if this exists it overrides the default seccomp path
-	SeccompOverridePath = "/etc/crio/seccomp.json"
+	SeccompOverridePath = config.SeccompOverridePath
 	// TypeBind is the type for mounting host dir
 	TypeBind = "bind"
 	// TypeTmpfs is the type for mounting tmpfs
@@ -47,6 +50,22 @@ const (
 	// Lifecycle of following directory will be inherited from how host machine treats temporary directory
 	BuildahCacheDir = "buildah-cache"
 )
+
+// RepoNamesToNamedReferences parse the raw string to Named reference
+func RepoNamesToNamedReferences(destList []string) ([]reference.Named, error) {
+	var result []reference.Named
+	for _, dest := range destList {
+		named, err := reference.ParseNormalizedNamed(dest)
+		if err != nil {
+			return nil, fmt.Errorf("invalid repo %q: must contain registry and repository: %w", dest, err)
+		}
+		if !reference.IsNameOnly(named) {
+			return nil, fmt.Errorf("repository must contain neither a tag nor digest: %v", named)
+		}
+		result = append(result, named)
+	}
+	return result, nil
+}
 
 // CommonBuildOptions parses the build options from the bud cli
 func CommonBuildOptions(c *cobra.Command) (*define.CommonBuildOptions, error) {
@@ -208,13 +227,14 @@ func GetAdditionalBuildContext(value string) (define.AdditionalBuildContext, err
 func parseSecurityOpts(securityOpts []string, commonOpts *define.CommonBuildOptions) error {
 	for _, opt := range securityOpts {
 		if opt == "no-new-privileges" {
-			return errors.New("no-new-privileges is not supported")
+			commonOpts.NoNewPrivileges = true
+			continue
 		}
+
 		con := strings.SplitN(opt, "=", 2)
 		if len(con) != 2 {
 			return fmt.Errorf("invalid --security-opt name=value pair: %q", opt)
 		}
-
 		switch con[0] {
 		case "label":
 			commonOpts.LabelOpts = append(commonOpts.LabelOpts, con[1])
@@ -232,11 +252,11 @@ func parseSecurityOpts(securityOpts []string, commonOpts *define.CommonBuildOpti
 		if _, err := os.Stat(SeccompOverridePath); err == nil {
 			commonOpts.SeccompProfilePath = SeccompOverridePath
 		} else {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 			if _, err := os.Stat(SeccompDefaultPath); err != nil {
-				if !os.IsNotExist(err) {
+				if !errors.Is(err, os.ErrNotExist) {
 					return err
 				}
 			} else {
@@ -331,6 +351,15 @@ func SystemContextFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name strin
 		ctx.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!tlsVerify)
 		ctx.OCIInsecureSkipTLSVerify = !tlsVerify
 		ctx.DockerDaemonInsecureSkipTLSVerify = !tlsVerify
+	}
+	insecure, err := flags.GetBool("insecure")
+	if err == nil && findFlagFunc("insecure").Changed {
+		if ctx.DockerInsecureSkipTLSVerify != types.OptionalBoolUndefined {
+			return nil, errors.New("--insecure may not be used with --tls-verify")
+		}
+		ctx.DockerInsecureSkipTLSVerify = types.NewOptionalBool(insecure)
+		ctx.OCIInsecureSkipTLSVerify = insecure
+		ctx.DockerDaemonInsecureSkipTLSVerify = insecure
 	}
 	disableCompression, err := flags.GetBool("disable-compression")
 	if err == nil {
@@ -789,15 +818,15 @@ func parseIDMap(spec []string) (m [][3]uint32, err error) {
 		for len(args) >= 3 {
 			cid, err := strconv.ParseUint(args[0], 10, 32)
 			if err != nil {
-				return nil, fmt.Errorf("error parsing container ID %q from mapping %q as a number: %w", args[0], s, err)
+				return nil, fmt.Errorf("parsing container ID %q from mapping %q as a number: %w", args[0], s, err)
 			}
 			hostid, err := strconv.ParseUint(args[1], 10, 32)
 			if err != nil {
-				return nil, fmt.Errorf("error parsing host ID %q from mapping %q as a number: %w", args[1], s, err)
+				return nil, fmt.Errorf("parsing host ID %q from mapping %q as a number: %w", args[1], s, err)
 			}
 			size, err := strconv.ParseUint(args[2], 10, 32)
 			if err != nil {
-				return nil, fmt.Errorf("error parsing %q from mapping %q as a number: %w", args[2], s, err)
+				return nil, fmt.Errorf("parsing %q from mapping %q as a number: %w", args[2], s, err)
 			}
 			m = append(m, [3]uint32{uint32(cid), uint32(hostid), uint32(size)})
 			args = args[3:]
@@ -905,10 +934,11 @@ func IsolationOption(isolation string) (define.Isolation, error) {
 
 // Device parses device mapping string to a src, dest & permissions string
 // Valid values for device look like:
-//    '/dev/sdc"
-//    '/dev/sdc:/dev/xvdc"
-//    '/dev/sdc:/dev/xvdc:rwm"
-//    '/dev/sdc:rm"
+//
+//	'/dev/sdc"
+//	'/dev/sdc:/dev/xvdc"
+//	'/dev/sdc:/dev/xvdc:rwm"
+//	'/dev/sdc:rm"
 func Device(device string) (string, string, string, error) {
 	src := ""
 	dst := ""
@@ -1052,18 +1082,45 @@ func SSH(sshSources []string) (map[string]*sshagent.Source, error) {
 	return parsed, nil
 }
 
-func ContainerIgnoreFile(contextDir, path string) ([]string, string, error) {
+// ContainerIgnoreFile consumes path to `dockerignore` or `containerignore`
+// and returns list of files to exclude along with the path to processed ignore
+// file. Deprecated since this might become internal only, please avoid relying
+// on this function.
+func ContainerIgnoreFile(contextDir, path string, containerFiles []string) ([]string, string, error) {
 	if path != "" {
 		excludes, err := imagebuilder.ParseIgnore(path)
 		return excludes, path, err
 	}
-	path = filepath.Join(contextDir, ".containerignore")
+	// If path was not supplied give priority to `<containerfile>.containerignore` first.
+	for _, containerfile := range containerFiles {
+		if !filepath.IsAbs(containerfile) {
+			containerfile = filepath.Join(contextDir, containerfile)
+		}
+		containerfileIgnore := ""
+		if _, err := os.Stat(containerfile + ".containerignore"); err == nil {
+			containerfileIgnore = containerfile + ".containerignore"
+		}
+		if _, err := os.Stat(containerfile + ".dockerignore"); err == nil {
+			containerfileIgnore = containerfile + ".dockerignore"
+		}
+		if containerfileIgnore != "" {
+			excludes, err := imagebuilder.ParseIgnore(containerfileIgnore)
+			return excludes, containerfileIgnore, err
+		}
+	}
+	path, symlinkErr := securejoin.SecureJoin(contextDir, ".containerignore")
+	if symlinkErr != nil {
+		return nil, "", symlinkErr
+	}
 	excludes, err := imagebuilder.ParseIgnore(path)
-	if os.IsNotExist(err) {
-		path = filepath.Join(contextDir, ".dockerignore")
+	if errors.Is(err, os.ErrNotExist) {
+		path, symlinkErr = securejoin.SecureJoin(contextDir, ".dockerignore")
+		if symlinkErr != nil {
+			return nil, "", symlinkErr
+		}
 		excludes, err = imagebuilder.ParseIgnore(path)
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return excludes, "", nil
 	}
 	return excludes, path, err

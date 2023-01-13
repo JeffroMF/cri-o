@@ -15,7 +15,7 @@ import "github.com/containers/common/libnetwork/types"
 // retrieved after they are pulled from the database.
 // Generally speaking, the syncContainer() call should be run at the beginning
 // of all API operations, which will silently handle this.
-type State interface {
+type State interface { //nolint:interfacebloat
 	// Close performs any pre-exit cleanup (e.g. closing database
 	// connections) that may be required
 	Close() error
@@ -104,6 +104,8 @@ type State interface {
 	GetNetworks(ctr *Container) (map[string]types.PerNetworkOptions, error)
 	// Add the container to the given network with the given options
 	NetworkConnect(ctr *Container, network string, opts types.PerNetworkOptions) error
+	// Modify the container network with the given options.
+	NetworkModify(ctr *Container, network string, opts types.PerNetworkOptions) error
 	// Remove the container from the given network, removing all aliases for
 	// the container in that network in the process.
 	NetworkDisconnect(ctr *Container, network string) error
@@ -143,6 +145,14 @@ type State interface {
 	// Usually used as part of removing the container.
 	// As with RemoveExecSession, container state will not be modified.
 	RemoveContainerExecSessions(ctr *Container) error
+
+	// ContainerIDIsVolume checks if the given container ID is in use by a
+	// volume.
+	// Some volumes are backed by a c/storage container. These do not have a
+	// corresponding Container struct in Libpod, but rather a Volume.
+	// This determines if a given ID from c/storage is used as a backend by
+	// a Podman volume.
+	ContainerIDIsVolume(id string) (bool, error)
 
 	// PLEASE READ FULL DESCRIPTION BEFORE USING.
 	// Rewrite a container's configuration.

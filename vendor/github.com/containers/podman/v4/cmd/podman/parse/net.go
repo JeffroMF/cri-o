@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 const (
@@ -22,8 +23,9 @@ const (
 
 var (
 	whiteSpaces  = " \t"
-	alphaRegexp  = regexp.MustCompile(`[a-zA-Z]`)
-	domainRegexp = regexp.MustCompile(`^(:?(:?[a-zA-Z0-9]|(:?[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]))(:?\.(:?[a-zA-Z0-9]|(:?[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])))*)\.?\s*$`)
+	alphaRegexp  *regexp.Regexp
+	domainRegexp *regexp.Regexp
+	onceRegex    sync.Once
 )
 
 // validateExtraHost validates that the specified string is a valid extrahost and returns it.
@@ -52,6 +54,10 @@ func validateIPAddress(val string) (string, error) {
 }
 
 func ValidateDomain(val string) (string, error) {
+	onceRegex.Do(func() {
+		alphaRegexp = regexp.MustCompile(`[a-zA-Z]`)
+		domainRegexp = regexp.MustCompile(`^(:?(:?[a-zA-Z0-9]|(:?[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]))(:?\.(:?[a-zA-Z0-9]|(:?[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])))*)\.?\s*$`)
+	})
 	if alphaRegexp.FindString(val) == "" {
 		return "", fmt.Errorf("%s is not a valid domain", val)
 	}
@@ -149,15 +155,6 @@ func parseEnvOrLabelFile(envOrLabel map[string]string, filename, configType stri
 		}
 	}
 	return scanner.Err()
-}
-
-// ValidateFileName returns an error if filename contains ":"
-// as it is currently not supported
-func ValidateFileName(filename string) error {
-	if strings.Contains(filename, ":") {
-		return fmt.Errorf("invalid filename (should not contain ':') %q", filename)
-	}
-	return nil
 }
 
 // ValidURL checks a string urlStr is a url or not

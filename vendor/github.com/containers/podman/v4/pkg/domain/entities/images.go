@@ -8,6 +8,7 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/types"
+	encconfig "github.com/containers/ocicrypt/config"
 	"github.com/containers/podman/v4/pkg/inspect"
 	"github.com/containers/podman/v4/pkg/trust"
 	"github.com/docker/docker/api/types/container"
@@ -94,6 +95,8 @@ type ImageRemoveOptions struct {
 	Ignore bool
 	// Confirms if given name is a manifest list and removes it, otherwise returns error.
 	LookupManifest bool
+	// NoPrune will not remove dangling images
+	NoPrune bool
 }
 
 // ImageRemoveReport is the response for removing one or more image(s) from storage
@@ -154,6 +157,11 @@ type ImagePullOptions struct {
 	SkipTLSVerify types.OptionalBool
 	// PullPolicy whether to pull new image
 	PullPolicy config.PullPolicy
+	// Writer is used to display copy information including progress bars.
+	Writer io.Writer
+	// OciDecryptConfig contains the config that can be used to decrypt an image if it is
+	// encrypted if non-nil. If nil, it does not attempt to decrypt an image.
+	OciDecryptConfig *encconfig.DecryptConfig
 }
 
 // ImagePullReport is the response from pulling one or more images.
@@ -205,6 +213,16 @@ type ImagePushOptions struct {
 	// SignBy adds a signature at the destination using the specified key.
 	// Ignored for remote calls.
 	SignBy string
+	// SignPassphrase, if non-empty, specifies a passphrase to use when signing
+	// with the key ID from SignBy.
+	SignPassphrase string
+	// SignBySigstorePrivateKeyFile, if non-empty, asks for a signature to be added
+	// during the copy, using a sigstore private key file at the provided path.
+	// Ignored for remote calls.
+	SignBySigstorePrivateKeyFile string
+	// SignSigstorePrivateKeyPassphrase is the passphrase to use when signing with
+	// SignBySigstorePrivateKeyFile.
+	SignSigstorePrivateKeyPassphrase []byte
 	// SkipTLSVerify to skip HTTPS and certificate verification.
 	SkipTLSVerify types.OptionalBool
 	// Progress to get progress notifications
@@ -213,6 +231,15 @@ type ImagePushOptions struct {
 	CompressionFormat string
 	// Writer is used to display copy information including progress bars.
 	Writer io.Writer
+	// OciEncryptConfig when non-nil indicates that an image should be encrypted.
+	// The encryption options is derived from the construction of EncryptConfig object.
+	OciEncryptConfig *encconfig.EncryptConfig
+	// OciEncryptLayers represents the list of layers to encrypt.
+	// If nil, don't encrypt any layers.
+	// If non-nil and len==0, denotes encrypt all layers.
+	// integers in the slice represent 0-indexed layer indices, with support for negative
+	// indexing. i.e. 0 is the first layer, -1 is the last (top-most) layer.
+	OciEncryptLayers *[]int
 }
 
 // ImagePushReport is the response from pushing an image.
@@ -321,7 +348,8 @@ type ImageSaveOptions struct {
 	// Output - write image to the specified path.
 	Output string
 	// Quiet - suppress output when copying images
-	Quiet bool
+	Quiet           bool
+	SignaturePolicy string
 }
 
 // ImageScpOptions provide options for securely copying images to and from a remote host
