@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	urlpkg "net/url"
 	"os"
@@ -30,7 +30,7 @@ const (
 	Package = "buildah"
 	// Version for the Package.  Bump version in contrib/rpm/buildah.spec
 	// too.
-	Version = "1.27.0-dev"
+	Version = "1.29.0"
 
 	// DefaultRuntime if containers.conf fails.
 	DefaultRuntime = "runc"
@@ -121,13 +121,13 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 		url != "-" {
 		return "", "", nil
 	}
-	name, err = ioutil.TempDir(dir, prefix)
+	name, err = os.MkdirTemp(dir, prefix)
 	if err != nil {
-		return "", "", fmt.Errorf("error creating temporary directory for %q: %w", url, err)
+		return "", "", fmt.Errorf("creating temporary directory for %q: %w", url, err)
 	}
 	urlParsed, err := urlpkg.Parse(url)
 	if err != nil {
-		return "", "", fmt.Errorf("error parsing url %q: %w", url, err)
+		return "", "", fmt.Errorf("parsing url %q: %w", url, err)
 	}
 	if strings.HasPrefix(url, "git://") || strings.HasSuffix(urlParsed.Path, ".git") {
 		combinedOutput, gitSubDir, err := cloneToDirectory(url, name)
@@ -137,12 +137,7 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 			}
 			return "", "", fmt.Errorf("cloning %q to %q:\n%s: %w", url, name, string(combinedOutput), err)
 		}
-		// Check if git url specifies any subdir
-		// if subdir is there switch to subdir.
-		if gitSubDir != "" {
-			name = filepath.Join(name, gitSubDir)
-		}
-		return name, "", nil
+		return name, gitSubDir, nil
 	}
 	if strings.HasPrefix(url, "github.com/") {
 		ghurl := url
@@ -178,11 +173,13 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 	return "", "", errors.New("unreachable code reached")
 }
 
-func cloneToDirectory(url, dir string) ([]byte, string, error) {
+// parseGitBuildContext parses git build context to `repo`, `sub-dir`
+// `branch/commit`, accepts GitBuildContext in the format of
+// `repourl.git[#[branch-or-commit]:subdir]`.
+func parseGitBuildContext(url string) (string, string, string) {
 	gitSubdir := ""
 	gitBranch := ""
 	gitBranchPart := strings.Split(url, "#")
-	var cmd *exec.Cmd
 	if len(gitBranchPart) > 1 {
 		// check if string contains path to a subdir
 		gitSubDirPart := strings.Split(gitBranchPart[1], ":")
@@ -191,16 +188,52 @@ func cloneToDirectory(url, dir string) ([]byte, string, error) {
 		}
 		gitBranch = gitSubDirPart[0]
 	}
-	if gitBranch == "" {
-		logrus.Debugf("cloning %q to %q", gitBranchPart[0], dir)
-		cmd = exec.Command("git", "clone", "--recurse-submodules", gitBranchPart[0], dir)
-	} else {
-		logrus.Debugf("cloning repo %q and branch %q to %q", gitBranchPart[0], gitBranch, dir)
-		cmd = exec.Command("git", "clone", "--recurse-submodules", "-b", gitBranch, gitBranchPart[0], dir)
-	}
+	return gitBranchPart[0], gitSubdir, gitBranch
+}
 
+func cloneToDirectory(url, dir string) ([]byte, string, error) {
+	var cmd *exec.Cmd
+	gitRepo, gitSubdir, gitBranch := parseGitBuildContext(url)
+	// init repo
+	cmd = exec.Command("git", "init", dir)
 	combinedOutput, err := cmd.CombinedOutput()
-	return combinedOutput, gitSubdir, err
+	if err != nil {
+		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git init`: %w", err)
+	}
+	// add origin
+	cmd = exec.Command("git", "remote", "add", "origin", gitRepo)
+	cmd.Dir = dir
+	combinedOutput, err = cmd.CombinedOutput()
+	if err != nil {
+		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git remote add`: %w", err)
+	}
+	// fetch required branch or commit and perform checkout
+	// Always default to `HEAD` if nothing specified
+	fetch := "HEAD"
+	if gitBranch != "" {
+		fetch = gitBranch
+	}
+	logrus.Debugf("fetching repo %q and branch (or commit ID) %q to %q", gitRepo, fetch, dir)
+	cmd = exec.Command("git", "fetch", "--depth=1", "origin", "--", fetch)
+	cmd.Dir = dir
+	combinedOutput, err = cmd.CombinedOutput()
+	if err != nil {
+		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git fetch`: %w", err)
+	}
+	if fetch == "HEAD" {
+		// We fetched default branch therefore
+		// we don't have any valid `branch` or
+		// `commit` name hence checkout detached
+		// `FETCH_HEAD`
+		fetch = "FETCH_HEAD"
+	}
+	cmd = exec.Command("git", "checkout", fetch)
+	cmd.Dir = dir
+	combinedOutput, err = cmd.CombinedOutput()
+	if err != nil {
+		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git checkout`: %w", err)
+	}
+	return combinedOutput, gitSubdir, nil
 }
 
 func downloadToDirectory(url, dir string) error {
@@ -222,7 +255,7 @@ func downloadToDirectory(url, dir string) error {
 			return err
 		}
 		defer resp1.Body.Close()
-		body, err := ioutil.ReadAll(resp1.Body)
+		body, err := io.ReadAll(resp1.Body)
 		if err != nil {
 			return err
 		}
@@ -238,7 +271,7 @@ func downloadToDirectory(url, dir string) error {
 func stdinToDirectory(dir string) error {
 	logrus.Debugf("extracting stdin to %q", dir)
 	r := bufio.NewReader(os.Stdin)
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
