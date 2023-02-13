@@ -19,6 +19,7 @@ package xdsresource
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 
@@ -31,15 +32,6 @@ import (
 	"google.golang.org/grpc/xds/internal"
 	"google.golang.org/protobuf/types/known/anypb"
 )
-
-// UnmarshalEndpoints processes resources received in an EDS response,
-// validates them, and transforms them into a native struct which contains only
-// fields we are interested in.
-func UnmarshalEndpoints(opts *UnmarshalOptions) (map[string]EndpointsUpdateErrTuple, UpdateMetadata, error) {
-	update := make(map[string]EndpointsUpdateErrTuple)
-	md, err := processAllResources(opts, update)
-	return update, md, err
-}
 
 func unmarshalEndpointsResource(r *anypb.Any, logger *grpclog.PrefixLogger) (string, EndpointsUpdate, error) {
 	r, err := unwrapResource(r)
@@ -90,16 +82,31 @@ func parseDropPolicy(dropPolicy *v3endpointpb.ClusterLoadAssignment_Policy_DropO
 	}
 }
 
-func parseEndpoints(lbEndpoints []*v3endpointpb.LbEndpoint) []Endpoint {
+func parseEndpoints(lbEndpoints []*v3endpointpb.LbEndpoint, uniqueEndpointAddrs map[string]bool) ([]Endpoint, error) {
 	endpoints := make([]Endpoint, 0, len(lbEndpoints))
 	for _, lbEndpoint := range lbEndpoints {
+		// If the load_balancing_weight field is specified, it must be set to a
+		// value of at least 1.  If unspecified, each host is presumed to have
+		// equal weight in a locality.
+		weight := uint32(1)
+		if w := lbEndpoint.GetLoadBalancingWeight(); w != nil {
+			if w.GetValue() == 0 {
+				return nil, fmt.Errorf("EDS response contains an endpoint with zero weight: %+v", lbEndpoint)
+			}
+			weight = w.GetValue()
+		}
+		addr := parseAddress(lbEndpoint.GetEndpoint().GetAddress().GetSocketAddress())
+		if uniqueEndpointAddrs[addr] {
+			return nil, fmt.Errorf("duplicate endpoint with the same address %s", addr)
+		}
+		uniqueEndpointAddrs[addr] = true
 		endpoints = append(endpoints, Endpoint{
 			HealthStatus: EndpointHealthStatus(lbEndpoint.GetHealthStatus()),
-			Address:      parseAddress(lbEndpoint.GetEndpoint().GetAddress().GetSocketAddress()),
-			Weight:       lbEndpoint.GetLoadBalancingWeight().GetValue(),
+			Address:      addr,
+			Weight:       weight,
 		})
 	}
-	return endpoints
+	return endpoints, nil
 }
 
 func parseEDSRespProto(m *v3endpointpb.ClusterLoadAssignment, logger *grpclog.PrefixLogger) (EndpointsUpdate, error) {
@@ -108,6 +115,8 @@ func parseEDSRespProto(m *v3endpointpb.ClusterLoadAssignment, logger *grpclog.Pr
 		ret.Drops = append(ret.Drops, parseDropPolicy(dropPolicy))
 	}
 	priorities := make(map[uint32]map[string]bool)
+	sumOfWeights := make(map[uint32]uint64)
+	uniqueEndpointAddrs := make(map[string]bool)
 	for _, locality := range m.Endpoints {
 		l := locality.GetLocality()
 		if l == nil {
@@ -118,25 +127,33 @@ func parseEDSRespProto(m *v3endpointpb.ClusterLoadAssignment, logger *grpclog.Pr
 			logger.Warningf("Ignoring locality %s with weight 0", pretty.ToJSON(l))
 			continue
 		}
-		lid := internal.LocalityID{
-			Region:  l.Region,
-			Zone:    l.Zone,
-			SubZone: l.SubZone,
-		}
 		priority := locality.GetPriority()
+		sumOfWeights[priority] += uint64(weight)
+		if sumOfWeights[priority] > math.MaxUint32 {
+			return EndpointsUpdate{}, fmt.Errorf("sum of weights of localities at the same priority %d exceeded maximal value", priority)
+		}
 		localitiesWithPriority := priorities[priority]
 		if localitiesWithPriority == nil {
 			localitiesWithPriority = make(map[string]bool)
 			priorities[priority] = localitiesWithPriority
+		}
+		lid := internal.LocalityID{
+			Region:  l.Region,
+			Zone:    l.Zone,
+			SubZone: l.SubZone,
 		}
 		lidStr, _ := lid.ToString()
 		if localitiesWithPriority[lidStr] {
 			return EndpointsUpdate{}, fmt.Errorf("duplicate locality %s with the same priority %v", lidStr, priority)
 		}
 		localitiesWithPriority[lidStr] = true
+		endpoints, err := parseEndpoints(locality.GetLbEndpoints(), uniqueEndpointAddrs)
+		if err != nil {
+			return EndpointsUpdate{}, err
+		}
 		ret.Localities = append(ret.Localities, Locality{
 			ID:        lid,
-			Endpoints: parseEndpoints(locality.GetLbEndpoints()),
+			Endpoints: endpoints,
 			Weight:    locality.GetLoadBalancingWeight().GetValue(),
 			Priority:  priority,
 		})
