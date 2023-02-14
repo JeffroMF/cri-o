@@ -14,10 +14,8 @@ BUILDAH := buildah
 GO := go
 GO_LDFLAGS := $(shell if $(GO) version|grep -q gccgo; then echo "-gccgoflags"; else echo "-ldflags"; fi)
 GO_GCFLAGS := $(shell if $(GO) version|grep -q gccgo; then echo "-gccgoflags"; else echo "-gcflags"; fi)
-GO110 := 1.10
-GOVERSION := $(findstring $(GO110),$(shell go version))
 # test for go module support
-ifeq ($(shell go help mod >/dev/null 2>&1 && echo true), true)
+ifeq ($(shell $(GO) help mod >/dev/null 2>&1 && echo true), true)
 export GO_BUILD=GO111MODULE=on $(GO) build -mod=vendor
 export GO_TEST=GO111MODULE=on $(GO) test -mod=vendor
 else
@@ -31,9 +29,12 @@ GIT_COMMIT ?= $(if $(shell git status --porcelain --untracked-files=no),${COMMIT
 SOURCE_DATE_EPOCH ?= $(if $(shell date +%s),$(shell date +%s),$(error "date failed"))
 STATIC_STORAGETAGS = "containers_image_openpgp exclude_graphdriver_devicemapper $(STORAGE_TAGS)"
 
-CNI_COMMIT := $(shell sed -n 's;\tgithub.com/containernetworking/cni \([^ \n]*\).*$\;\1;p' go.mod)
-#RUNC_COMMIT := $(shell sed -n 's;\tgithub.com/opencontainers/runc \([^ \n]*\).*$\;\1;p' go.mod)
-RUNC_COMMIT := v1.0.0-rc8
+# we get GNU make 3.x in MacOS build envs, which wants # to be escaped in
+# strings, while the 4.x we have on Linux doesn't. this is the documented
+# workaround
+COMMENT := \#
+CNI_COMMIT := $(shell sed -n 's;^$(COMMENT) github.com/containernetworking/cni \([^ \n]*\).*$$;\1;p' vendor/modules.txt)
+RUNC_COMMIT := $(shell sed -n 's;^$(COMMENT) github.com/opencontainers/runc \([^ \n]*\).*$$;\1;p' vendor/modules.txt)
 LIBSECCOMP_COMMIT := release-2.3
 
 EXTRA_LDFLAGS ?=
@@ -50,7 +51,7 @@ endif
 #     Note: Uses the -N -l go compiler options to disable compiler optimizations
 #           and inlining. Using these build options allows you to subsequently
 #           use source debugging tools like delve.
-all: bin/buildah bin/imgtype bin/copy docs
+all: bin/buildah bin/imgtype bin/copy bin/tutorial docs
 
 # Update nix/nixpkgs.json its latest stable commit
 .PHONY: nixpkgs
@@ -74,7 +75,8 @@ bin/buildah: $(SOURCES) cmd/buildah/*.go
 .PHONY: buildah
 buildah: bin/buildah
 
-ALL_CROSS_TARGETS := $(addprefix bin/buildah.,$(subst /,.,$(shell $(GO) tool dist list)))
+# TODO: remove `grep -v loong64` from `ALL_CROSS_TARGETS` once go.etcd.io/bbolt 1.3.7 is out.
+ALL_CROSS_TARGETS := $(addprefix bin/buildah.,$(subst /,.,$(shell $(GO) tool dist list | grep -v loong64)))
 LINUX_CROSS_TARGETS := $(filter bin/buildah.linux.%,$(ALL_CROSS_TARGETS))
 DARWIN_CROSS_TARGETS := $(filter bin/buildah.darwin.%,$(ALL_CROSS_TARGETS))
 WINDOWS_CROSS_TARGETS := $(addsuffix .exe,$(filter bin/buildah.windows.%,$(ALL_CROSS_TARGETS)))
@@ -92,6 +94,9 @@ bin/imgtype: $(SOURCES) tests/imgtype/imgtype.go
 bin/copy: $(SOURCES) tests/copy/copy.go
 	$(GO_BUILD) $(BUILDAH_LDFLAGS) -o $@ $(BUILDFLAGS) ./tests/copy/copy.go
 
+bin/tutorial: $(SOURCES) tests/tutorial/tutorial.go
+	$(GO_BUILD) $(BUILDAH_LDFLAGS) -o $@ $(BUILDFLAGS) ./tests/tutorial/tutorial.go
+
 .PHONY: clean
 clean:
 	$(RM) -r bin tests/testreport/testreport
@@ -108,7 +113,7 @@ gopath:
 	test $(shell pwd) = $(shell cd ../../../../src/github.com/containers/buildah ; pwd)
 
 codespell:
-	codespell -S Makefile,build,buildah,buildah.spec,imgtype,copy,AUTHORS,bin,vendor,.git,go.sum,CHANGELOG.md,changelog.txt,seccomp.json,.cirrus.yml,"*.xz,*.gz,*.tar,*.tgz,*ico,*.png,*.1,*.5,*.orig,*.rej" -L uint,iff,od,ERRO -w
+	codespell -S Makefile,buildah.spec.rpkg,AUTHORS,bin,vendor,.git,go.mod,go.sum,CHANGELOG.md,changelog.txt,seccomp.json,.cirrus.yml,"*.xz,*.gz,*.tar,*.tgz,*ico,*.png,*.1,*.5,*.orig,*.rej" -L uint,iff,od,erro -w
 
 .PHONY: validate
 validate: install.tools
@@ -118,7 +123,7 @@ validate: install.tools
 
 .PHONY: install.tools
 install.tools:
-	make -C tests/tools
+	$(MAKE) -C tests/tools
 
 .PHONY: runc
 runc: gopath
@@ -141,7 +146,8 @@ install.cni.sudo: gopath
 
 .PHONY: install
 install:
-	install -D -m0755 bin/buildah $(DESTDIR)/$(BINDIR)/buildah
+	install -d -m 755 $(DESTDIR)/$(BINDIR)
+	install -m 755 bin/buildah $(DESTDIR)/$(BINDIR)/buildah
 	$(MAKE) -C docs install
 
 .PHONY: uninstall
@@ -152,7 +158,8 @@ uninstall:
 
 .PHONY: install.completions
 install.completions:
-	install -m 644 -D contrib/completions/bash/buildah $(DESTDIR)/$(BASHINSTALLDIR)/buildah
+	install -m 755 -d $(DESTDIR)/$(BASHINSTALLDIR)
+	install -m 644 contrib/completions/bash/buildah $(DESTDIR)/$(BASHINSTALLDIR)/buildah
 
 .PHONY: install.runc
 install.runc:
@@ -182,7 +189,7 @@ vendor-in-container:
 
 .PHONY: vendor
 vendor:
-	GO111MODULE=on $(GO) mod tidy
+	GO111MODULE=on $(GO) mod tidy -compat=1.17
 	GO111MODULE=on $(GO) mod vendor
 	GO111MODULE=on $(GO) mod verify
 
