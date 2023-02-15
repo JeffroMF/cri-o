@@ -111,6 +111,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
+	github.com/agnivade/levenshtein v1.0.1 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go v1.44.55 // indirect
@@ -281,7 +282,7 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/open-policy-agent/opa v0.35.0 // indirect
+	github.com/open-policy-agent/opa v0.43.1 // indirect
 	github.com/openshift/imagebuilder v1.2.4-0.20220711175835-4151e43600df // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/ostreedev/ostree-go v0.0.0-20210805093236-719684c64e4f // indirect
@@ -339,6 +340,7 @@ require (
 	github.com/urfave/cli v1.22.9 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
 	github.com/vbauerster/mpb/v7 v7.4.2 // indirect
+	github.com/vektah/gqlparser/v2 v2.4.6 // indirect
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	github.com/xanzy/go-gitlab v0.68.2 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
@@ -348,7 +350,7 @@ require (
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	github.com/yashtewari/glob-intersection v0.0.0-20180916065949-5c77d914dd0b // indirect
+	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
