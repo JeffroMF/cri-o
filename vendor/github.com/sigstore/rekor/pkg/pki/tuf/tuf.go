@@ -19,11 +19,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"time"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	sigsig "github.com/sigstore/sigstore/pkg/signature"
-	cjson "github.com/tent/canonical-json-go"
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/verify"
 )
@@ -43,7 +42,7 @@ type signedMeta struct {
 
 // NewSignature creates and validates a TUF signed manifest
 func NewSignature(r io.Reader) (*Signature, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +70,11 @@ func (s Signature) CanonicalValue() ([]byte, error) {
 	if s.signed == nil {
 		return nil, fmt.Errorf("tuf manifest has not been initialized")
 	}
-	// TODO(asraa): Should the Signed payload be canonicalized?
-	canonical, err := cjson.Marshal(s.signed)
+	marshalledBytes, err := json.Marshal(s.signed)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshalling signature: %w", err)
 	}
-
-	return canonical, nil
+	return jsoncanonicalizer.Transform(marshalledBytes)
 }
 
 // Verify implements the pki.Signature interface
@@ -103,7 +100,7 @@ type PublicKey struct {
 
 // NewPublicKey implements the pki.PublicKey interface
 func NewPublicKey(r io.Reader) (*PublicKey, error) {
-	rawRoot, err := ioutil.ReadAll(r)
+	rawRoot, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -141,16 +138,14 @@ func NewPublicKey(r io.Reader) (*PublicKey, error) {
 
 // CanonicalValue implements the pki.PublicKey interface
 func (k PublicKey) CanonicalValue() (encoded []byte, err error) {
-	// TODO(asraa): Should the Signed payload be canonicalized?
 	if k.root == nil {
 		return nil, fmt.Errorf("tuf root has not been initialized")
 	}
-	canonical, err := cjson.Marshal(k.root)
+	marshalledBytes, err := json.Marshal(k.root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshalling tuf root: %w", err)
 	}
-
-	return canonical, nil
+	return jsoncanonicalizer.Transform(marshalledBytes)
 }
 
 func (k PublicKey) SpecVersion() (string, error) {
@@ -170,4 +165,17 @@ func (k PublicKey) EmailAddresses() []string {
 // Subjects implements the pki.PublicKey interface
 func (k PublicKey) Subjects() []string {
 	return nil
+}
+
+// Identities implements the pki.PublicKey interface
+func (k PublicKey) Identities() ([]string, error) {
+	root := &data.Root{}
+	if err := json.Unmarshal(k.root.Signed, root); err != nil {
+		return nil, err
+	}
+	identity, err := json.Marshal(root.Keys)
+	if err != nil {
+		return nil, err
+	}
+	return []string{string(identity)}, nil
 }
