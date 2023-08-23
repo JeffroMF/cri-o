@@ -362,7 +362,7 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.6.0-alpha.0 // indirect
 	go.etcd.io/etcd/server/v3 v3.6.0-alpha.0 // indirect
 	go.etcd.io/etcd/tests/v3 v3.6.0-alpha.0 // indirect
-	go.etcd.io/etcd/v3 v3.5.5-0.20220715002707-3237289fffb8 // indirect
+	go.etcd.io/etcd/v3 v3.5.5 // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1 // indirect
 	go.opencensus.io v0.23.0 // indirect

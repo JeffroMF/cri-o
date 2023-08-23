@@ -2210,7 +2210,7 @@ go.etcd.io/etcd/server/v3/verify
 ## explicit; go 1.17
 go.etcd.io/etcd/tests/v3/framework/integration
 go.etcd.io/etcd/tests/v3/integration
-# go.etcd.io/etcd/v3 v3.5.5-0.20220715002707-3237289fffb8
+# go.etcd.io/etcd/v3 v3.5.5
 ## explicit; go 1.16
 go.etcd.io/etcd/v3
 # go.mongodb.org/mongo-driver v1.8.3
