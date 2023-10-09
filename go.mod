@@ -11,7 +11,7 @@ require (
 	github.com/containerd/containerd v1.6.6
 	github.com/containerd/cri-containerd v1.19.0
 	github.com/containerd/fifo v1.0.0
-	github.com/containerd/ttrpc v1.1.0
+	github.com/containerd/ttrpc v1.2.2
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.1.1
@@ -65,7 +65,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.9.0
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
-	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8
+	golang.org/x/sys v0.1.0
 	google.golang.org/grpc v1.48.0
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.3
