@@ -1,6 +1,7 @@
 // Copyright (c) 2016, Daniel Martí <mvdan@mvdan.cc>
 // See LICENSE for licensing information
 
+// shfmt formats shell programs.
 package main
 
 import (
@@ -16,7 +17,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	maybeio "github.com/google/renameio/maybe"
+	maybeio "github.com/google/renameio/v2/maybe"
 	diffpkg "github.com/pkg/diff"
 	diffwrite "github.com/pkg/diff/write"
 	"golang.org/x/term"
@@ -24,52 +25,37 @@ import (
 
 	"mvdan.cc/sh/v3/fileutil"
 	"mvdan.cc/sh/v3/syntax"
+	"mvdan.cc/sh/v3/syntax/typedjson"
 )
 
-// TODO: this flag business screams generics. try again with Go 1.18+.
-
-type boolFlag struct {
+type multiFlag[T any] struct {
 	short, long string
-	val         bool
-}
-
-type stringFlag struct {
-	short, long string
-	val         string
-}
-
-type uintFlag struct {
-	short, long string
-	val         uint
-}
-
-type langFlag struct {
-	short, long string
-	val         syntax.LangVariant
+	val         T
 }
 
 var (
-	versionFlag = &boolFlag{"", "version", false}
-	list        = &boolFlag{"l", "list", false}
+	versionFlag = &multiFlag[bool]{"", "version", false}
+	list        = &multiFlag[bool]{"l", "list", false}
 
-	write    = &boolFlag{"w", "write", false}
-	simplify = &boolFlag{"s", "simplify", false}
-	minify   = &boolFlag{"mn", "minify", false}
-	find     = &boolFlag{"f", "find", false}
-	diff     = &boolFlag{"d", "diff", false}
+	write    = &multiFlag[bool]{"w", "write", false}
+	simplify = &multiFlag[bool]{"s", "simplify", false}
+	minify   = &multiFlag[bool]{"mn", "minify", false}
+	find     = &multiFlag[bool]{"f", "find", false}
+	diff     = &multiFlag[bool]{"d", "diff", false}
 
-	lang     = &langFlag{"ln", "language-dialect", syntax.LangAuto}
-	posix    = &boolFlag{"p", "posix", false}
-	filename = &stringFlag{"", "filename", ""}
+	lang     = &multiFlag[syntax.LangVariant]{"ln", "language-dialect", syntax.LangAuto}
+	posix    = &multiFlag[bool]{"p", "posix", false}
+	filename = &multiFlag[string]{"", "filename", ""}
 
-	indent      = &uintFlag{"i", "indent", 0}
-	binNext     = &boolFlag{"bn", "binary-next-line", false}
-	caseIndent  = &boolFlag{"ci", "case-indent", false}
-	spaceRedirs = &boolFlag{"sr", "space-redirects", false}
-	keepPadding = &boolFlag{"kp", "keep-padding", false}
-	funcNext    = &boolFlag{"fn", "func-next-line", false}
+	indent      = &multiFlag[uint]{"i", "indent", 0}
+	binNext     = &multiFlag[bool]{"bn", "binary-next-line", false}
+	caseIndent  = &multiFlag[bool]{"ci", "case-indent", false}
+	spaceRedirs = &multiFlag[bool]{"sr", "space-redirects", false}
+	keepPadding = &multiFlag[bool]{"kp", "keep-padding", false}
+	funcNext    = &multiFlag[bool]{"fn", "func-next-line", false}
 
-	toJSON = &boolFlag{"tojson", "", false} // TODO(v4): consider "to-json" for consistency
+	toJSON   = &multiFlag[bool]{"tojson", "to-json", false} // TODO(v4): remove "tojson" for consistency
+	fromJSON = &multiFlag[bool]{"", "from-json", false}
 
 	// useEditorConfig will be false if any parser or printer flags were used.
 	useEditorConfig = true
@@ -86,38 +72,41 @@ var (
 
 	version = "(devel)" // to match the default from runtime/debug
 
-	allFlags = []interface{}{
+	allFlags = []any{
 		versionFlag, list, write, simplify, minify, find, diff,
 		lang, posix, filename,
-		indent, binNext, caseIndent, spaceRedirs, keepPadding, funcNext, toJSON,
+		indent, binNext, caseIndent, spaceRedirs, keepPadding, funcNext, toJSON, fromJSON,
 	}
 )
 
 func init() {
+	// TODO: the flag package has constructors like newBoolValue;
+	// if we had access to something like that, we could use flag.Value everywhere,
+	// and avoid this monstrosity of a type switch.
 	for _, f := range allFlags {
 		switch f := f.(type) {
-		case *boolFlag:
+		case *multiFlag[bool]:
 			if name := f.short; name != "" {
 				flag.BoolVar(&f.val, name, f.val, "")
 			}
 			if name := f.long; name != "" {
 				flag.BoolVar(&f.val, name, f.val, "")
 			}
-		case *stringFlag:
+		case *multiFlag[string]:
 			if name := f.short; name != "" {
 				flag.StringVar(&f.val, name, f.val, "")
 			}
 			if name := f.long; name != "" {
 				flag.StringVar(&f.val, name, f.val, "")
 			}
-		case *uintFlag:
+		case *multiFlag[uint]:
 			if name := f.short; name != "" {
 				flag.UintVar(&f.val, name, f.val, "")
 			}
 			if name := f.long; name != "" {
 				flag.UintVar(&f.val, name, f.val, "")
 			}
-		case *langFlag:
+		case *multiFlag[syntax.LangVariant]:
 			if name := f.short; name != "" {
 				flag.Var(&f.val, name, "")
 			}
@@ -168,7 +157,8 @@ Printer options:
 Utilities:
 
   -f, --find   recursively find all shell files and print the paths
-  --tojson     print syntax tree to stdout as a typed JSON
+  --to-json    print syntax tree to stdout as a typed JSON
+  --from-json  read syntax tree from stdin as a typed JSON
 
 For more information, see 'man shfmt' and https://github.com/mvdan/sh.
 `)
@@ -194,8 +184,9 @@ For more information, see 'man shfmt' and https://github.com/mvdan/sh.
 	if minify.val {
 		simplify.val = true
 	}
+	// TODO(mvdan): remove sometime in 2024.
 	if os.Getenv("SHFMT_NO_EDITORCONFIG") == "true" {
-		useEditorConfig = false
+		fmt.Fprintln(os.Stderr, "SHFMT_NO_EDITORCONFIG was always undocumented; use any parser or printer flag to disable editorconfig support")
 	}
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -237,6 +228,9 @@ For more information, see 'man shfmt' and https://github.com/mvdan/sh.
 	}
 	if flag.NArg() == 0 || (flag.NArg() == 1 && flag.Arg(0) == "-") {
 		name := "<standard input>"
+		if toJSON.val {
+			name = "" // the default is not useful there
+		}
 		if filename.val != "" {
 			name = filename.val
 		}
@@ -253,7 +247,7 @@ For more information, see 'man shfmt' and https://github.com/mvdan/sh.
 		return 1
 	}
 	if toJSON.val {
-		fmt.Fprintln(os.Stderr, "-tojson can only be used with stdin")
+		fmt.Fprintln(os.Stderr, "--to-json can only be used with stdin")
 		return 1
 	}
 	status := 0
@@ -394,7 +388,7 @@ func formatPath(path string, checkShebang bool) error {
 	}
 	readBuf.Reset()
 	if checkShebang || shebangForAuto {
-		n, err := io.ReadAtLeast(f, copyBuf[:32], len("#/bin/sh\n"))
+		n, err := io.ReadAtLeast(f, copyBuf[:32], len("#!/bin/sh\n"))
 		switch {
 		case !checkShebang:
 			// only wanted the shebang for LangAuto
@@ -426,29 +420,43 @@ func formatPath(path string, checkShebang bool) error {
 	return formatBytes(readBuf.Bytes(), path, fileLang)
 }
 
-func formatBytes(src []byte, path string, lang syntax.LangVariant) error {
+func formatBytes(src []byte, path string, fileLang syntax.LangVariant) error {
 	if useEditorConfig {
 		props, err := ecQuery.Find(path)
 		if err != nil {
 			return err
 		}
-		propsOptions(lang, props)
+		propsOptions(fileLang, props)
 	} else {
-		syntax.Variant(lang)(parser)
+		syntax.Variant(fileLang)(parser)
 	}
-	prog, err := parser.Parse(bytes.NewReader(src), path)
-	if err != nil {
-		return err
+	var node syntax.Node
+	var err error
+	if fromJSON.val {
+		node, err = typedjson.Decode(bytes.NewReader(src))
+		if err != nil {
+			return err
+		}
+	} else {
+		node, err = parser.Parse(bytes.NewReader(src), path)
+		if err != nil {
+			if s, ok := err.(syntax.LangError); ok && lang.val == syntax.LangAuto {
+				return fmt.Errorf("%w (parsed as %s via -%s=%s)", s, fileLang, lang.short, lang.val)
+			}
+			return err
+		}
 	}
 	if simplify.val {
-		syntax.Simplify(prog)
+		syntax.Simplify(node)
 	}
 	if toJSON.val {
 		// must be standard input; fine to return
-		return writeJSON(out, prog, true)
+		// TODO: change the default behavior to be compact,
+		// and allow using --to-json=pretty or --to-json=indent.
+		return typedjson.EncodeOptions{Indent: "\t"}.Encode(out, node)
 	}
 	writeBuf.Reset()
-	printer.Print(&writeBuf, prog)
+	printer.Print(&writeBuf, node)
 	res := writeBuf.Bytes()
 	if !bytes.Equal(src, res) {
 		if list.val {
