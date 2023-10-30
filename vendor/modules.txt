@@ -848,7 +848,7 @@ github.com/docker/distribution/registry/client/auth/challenge
 github.com/docker/distribution/registry/client/transport
 github.com/docker/distribution/registry/storage/cache
 github.com/docker/distribution/registry/storage/cache/memory
-# github.com/docker/docker v20.10.17+incompatible
+# github.com/docker/docker v24.0.7+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -868,6 +868,7 @@ github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
 github.com/docker/docker/errdefs
+github.com/docker/docker/libnetwork/ipamutils
 github.com/docker/docker/opts
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/fileutils
@@ -876,14 +877,14 @@ github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/ioutils
 github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/longpath
+github.com/docker/docker/pkg/meminfo
 github.com/docker/docker/pkg/namesgenerator
 github.com/docker/docker/pkg/parsers
 github.com/docker/docker/pkg/pools
+github.com/docker/docker/pkg/process
 github.com/docker/docker/pkg/stdcopy
-github.com/docker/docker/pkg/stringid
 github.com/docker/docker/pkg/system
 github.com/docker/docker/registry
-github.com/docker/docker/rootless
 # github.com/docker/docker-credential-helpers v0.6.4
 ## explicit; go 1.13
 github.com/docker/docker-credential-helpers/client
@@ -906,9 +907,6 @@ github.com/docker/go-plugins-helpers/volume
 # github.com/docker/go-units v0.4.0
 ## explicit
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.8.0-dev.2.0.20190625141545-5a177b73e316
-## explicit
-github.com/docker/libnetwork/ipamutils
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
@@ -1502,16 +1500,19 @@ github.com/mmarkdown/mmark/mparser
 # github.com/moby/locker v1.0.1
 ## explicit; go 1.13
 github.com/moby/locker
+# github.com/moby/patternmatcher v0.6.0
+## explicit; go 1.19
+github.com/moby/patternmatcher
 # github.com/moby/spdystream v0.2.0
 ## explicit; go 1.13
 github.com/moby/spdystream
 github.com/moby/spdystream/spdy
-# github.com/moby/sys/mount v0.3.3
-## explicit; go 1.16
-github.com/moby/sys/mount
 # github.com/moby/sys/mountinfo v0.6.2
 ## explicit; go 1.16
 github.com/moby/sys/mountinfo
+# github.com/moby/sys/sequential v0.5.0
+## explicit; go 1.17
+github.com/moby/sys/sequential
 # github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
 ## explicit; go 1.13
 github.com/moby/term
