@@ -15,15 +15,15 @@ require (
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.1.1
-	github.com/containers/buildah v1.26.1-0.20220716095526-d31d27c357ab
+	github.com/containers/buildah v1.27.4
 	github.com/containers/common v0.49.1
 	github.com/containers/conmon v2.0.20+incompatible
 	github.com/containers/conmon-rs v0.0.0-20220727163913-8698d2df0588
-	github.com/containers/image/v5 v5.22.0
+	github.com/containers/image/v5 v5.22.1
 	github.com/containers/kubensmnt v1.1.2
 	github.com/containers/ocicrypt v1.1.5
 	github.com/containers/podman/v4 v4.2.0-rc2
-	github.com/containers/storage v1.42.0
+	github.com/containers/storage v1.42.1-0.20221104172635-d3b97ec7b760
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/cpuguy83/go-md2man v1.0.10
 	github.com/creack/pty v1.1.18
@@ -50,7 +50,7 @@ require (
 	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20211214071223-8958f93039ab
 	github.com/opencontainers/runtime-tools v0.9.1-0.20220714195903-17b3287fafb7
-	github.com/opencontainers/selinux v1.10.1
+	github.com/opencontainers/selinux v1.10.2
 	github.com/prometheus/client_golang v1.12.2
 	github.com/psampaz/go-mod-outdated v0.8.0
 	github.com/sirupsen/logrus v1.9.0
@@ -385,7 +385,7 @@ require (
 	google.golang.org/api v0.86.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/cheggaaa/pb.v1 v1.0.28 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.66.6 // indirect

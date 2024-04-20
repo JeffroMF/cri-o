@@ -58,6 +58,9 @@ var builtinAllowedBuildArgs = map[string]bool{
 // interface.  It coordinates the entire build by using one or more
 // StageExecutors to handle each stage of the build.
 type Executor struct {
+	cacheFrom                      reference.Named
+	cacheTo                        reference.Named
+	cacheTTL                       time.Duration
 	containerSuffix                string
 	logger                         *logrus.Logger
 	stages                         map[string]*StageExecutor
@@ -79,6 +82,7 @@ type Executor struct {
 	out                            io.Writer
 	err                            io.Writer
 	signaturePolicyPath            string
+	skipUnusedStages               types.OptionalBool
 	systemContext                  *types.SystemContext
 	reportWriter                   io.Writer
 	isolation                      define.Isolation
@@ -212,6 +216,9 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 	}
 
 	exec := Executor{
+		cacheFrom:                      options.CacheFrom,
+		cacheTo:                        options.CacheTo,
+		cacheTTL:                       options.CacheTTL,
 		containerSuffix:                options.ContainerSuffix,
 		logger:                         logger,
 		stages:                         make(map[string]*StageExecutor),
@@ -231,6 +238,7 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		outputFormat:                   options.OutputFormat,
 		additionalTags:                 options.AdditionalTags,
 		signaturePolicyPath:            options.SignaturePolicyPath,
+		skipUnusedStages:               options.SkipUnusedStages,
 		systemContext:                  options.SystemContext,
 		log:                            options.Log,
 		in:                             options.In,
@@ -786,9 +794,10 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 					return
 				}
 				// Skip stage if it is not needed by TargetStage
-				// or any of its dependency stages.
+				// or any of its dependency stages and `SkipUnusedStages`
+				// is not set to `false`.
 				if stageDependencyInfo, ok := dependencyMap[stages[index].Name]; ok {
-					if !stageDependencyInfo.NeededByTarget {
+					if !stageDependencyInfo.NeededByTarget && b.skipUnusedStages != types.OptionalBoolFalse {
 						logrus.Debugf("Skipping stage with Name %q and index %d since its not needed by the target stage", stages[index].Name, index)
 						ch <- Result{
 							Index: index,

@@ -1558,7 +1558,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			} else {
 				// FreeBSD can return EISDIR for "mkdir /":
 				// https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=59739.
-				if !os.IsExist(err) && !errors.Is(err, syscall.EISDIR) {
+				if !errors.Is(err, os.ErrExist) && !errors.Is(err, syscall.EISDIR) {
 					return fmt.Errorf("copier: put: error checking directory %q: %w", path, err)
 				}
 			}
@@ -1566,22 +1566,22 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 		return nil
 	}
 	makeDirectoryWriteable := func(directory string) error {
-		st, err := os.Lstat(directory)
-		if err != nil {
-			return fmt.Errorf("copier: put: error reading permissions of directory %q: %w", directory, err)
-		}
-		mode := st.Mode() & os.ModePerm
 		if _, ok := directoryModes[directory]; !ok {
+			st, err := os.Lstat(directory)
+			if err != nil {
+				return fmt.Errorf("copier: put: error reading permissions of directory %q: %w", directory, err)
+			}
+			mode := st.Mode()
 			directoryModes[directory] = mode
 		}
-		if err = os.Chmod(directory, 0o700); err != nil {
+		if err := os.Chmod(directory, 0o700); err != nil {
 			return fmt.Errorf("copier: put: error making directory %q writable: %w", directory, err)
 		}
 		return nil
 	}
 	createFile := func(path string, tr *tar.Reader) (int64, error) {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_EXCL, 0600)
-		if err != nil && os.IsExist(err) {
+		if err != nil && errors.Is(err, os.ErrExist) {
 			if req.PutOptions.NoOverwriteDirNonDir {
 				if st, err2 := os.Lstat(path); err2 == nil && st.IsDir() {
 					return 0, fmt.Errorf("copier: put: error creating file at %q: %w", path, err)
@@ -1626,7 +1626,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			return errorResponse("copier: put: %s (%s): exists but is not a directory", req.Directory, targetDirectory)
 		}
 	} else {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return errorResponse("copier: put: %s: %v", req.Directory, err)
 		}
 		if err := ensureDirectoryUnderRoot(req.Directory); err != nil {
@@ -1738,7 +1738,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 				if linkTarget, err = resolvePath(targetDirectory, filepath.Join(req.Root, filepath.FromSlash(hdr.Linkname)), true, nil); err != nil {
 					return fmt.Errorf("error resolving hardlink target path %q under root %q", hdr.Linkname, req.Root)
 				}
-				if err = os.Link(linkTarget, path); err != nil && os.IsExist(err) {
+				if err = os.Link(linkTarget, path); err != nil && errors.Is(err, os.ErrExist) {
 					if req.PutOptions.NoOverwriteDirNonDir {
 						if st, err := os.Lstat(path); err == nil && st.IsDir() {
 							break
@@ -1753,7 +1753,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 				//	todo: the general solution requires resolving to an absolute path, handling
 				//	renaming, and then possibly converting back to a relative symlink
 				// }
-				if err = os.Symlink(filepath.FromSlash(hdr.Linkname), filepath.FromSlash(path)); err != nil && os.IsExist(err) {
+				if err = os.Symlink(filepath.FromSlash(hdr.Linkname), filepath.FromSlash(path)); err != nil && errors.Is(err, os.ErrExist) {
 					if req.PutOptions.NoOverwriteDirNonDir {
 						if st, err := os.Lstat(path); err == nil && st.IsDir() {
 							break
@@ -1768,7 +1768,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 					ignoredItems[nameBeforeRenaming] = struct{}{}
 					goto nextHeader
 				}
-				if err = mknod(path, chrMode(0600), int(mkdev(devMajor, devMinor))); err != nil && os.IsExist(err) {
+				if err = mknod(path, chrMode(0600), int(mkdev(devMajor, devMinor))); err != nil && errors.Is(err, os.ErrExist) {
 					if req.PutOptions.NoOverwriteDirNonDir {
 						if st, err := os.Lstat(path); err == nil && st.IsDir() {
 							break
@@ -1783,7 +1783,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 					ignoredItems[nameBeforeRenaming] = struct{}{}
 					goto nextHeader
 				}
-				if err = mknod(path, blkMode(0600), int(mkdev(devMajor, devMinor))); err != nil && os.IsExist(err) {
+				if err = mknod(path, blkMode(0600), int(mkdev(devMajor, devMinor))); err != nil && errors.Is(err, os.ErrExist) {
 					if req.PutOptions.NoOverwriteDirNonDir {
 						if st, err := os.Lstat(path); err == nil && st.IsDir() {
 							break
@@ -1794,7 +1794,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 					}
 				}
 			case tar.TypeDir:
-				if err = os.Mkdir(path, 0700); err != nil && os.IsExist(err) {
+				if err = os.Mkdir(path, 0700); err != nil && errors.Is(err, os.ErrExist) {
 					if st, stErr := os.Lstat(path); stErr == nil && !st.IsDir() {
 						if req.PutOptions.NoOverwriteNonDirDir {
 							break
@@ -1821,7 +1821,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 				// the archive more than once for whatever reason
 				directoryModes[path] = mode
 			case tar.TypeFifo:
-				if err = mkfifo(path, 0600); err != nil && os.IsExist(err) {
+				if err = mkfifo(path, 0600); err != nil && errors.Is(err, os.ErrExist) {
 					if req.PutOptions.NoOverwriteDirNonDir {
 						if st, err := os.Lstat(path); err == nil && st.IsDir() {
 							break
@@ -1860,16 +1860,21 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			// set other bits that might have been reset by chown()
 			if hdr.Typeflag != tar.TypeSymlink {
 				if hdr.Mode&cISUID == cISUID {
-					mode |= syscall.S_ISUID
+					mode |= os.ModeSetuid
 				}
 				if hdr.Mode&cISGID == cISGID {
-					mode |= syscall.S_ISGID
+					mode |= os.ModeSetgid
 				}
 				if hdr.Mode&cISVTX == cISVTX {
-					mode |= syscall.S_ISVTX
+					mode |= os.ModeSticky
 				}
-				if err = syscall.Chmod(path, uint32(mode)); err != nil {
-					return fmt.Errorf("error setting additional permissions on %q to 0%o: %w", path, mode, err)
+				if hdr.Typeflag == tar.TypeDir {
+					// if/when we do the final setting of permissions on this
+					// directory, make sure to incorporate these bits, too
+					directoryModes[path] = mode
+				}
+				if err = os.Chmod(path, mode); err != nil {
+					return fmt.Errorf("copier: put: setting additional permissions on %q to 0%o: %w", path, mode, err)
 				}
 			}
 			// set xattrs, including some that might have been reset by chown()
@@ -1943,7 +1948,7 @@ func copierHandlerMkdir(req request, idMappings *idtools.IDMappings) (*response,
 		} else {
 			// FreeBSD can return EISDIR for "mkdir /":
 			// https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=59739.
-			if !os.IsExist(err) && !errors.Is(err, syscall.EISDIR) {
+			if !errors.Is(err, os.ErrExist) && !errors.Is(err, syscall.EISDIR) {
 				return errorResponse("copier: mkdir: error checking directory %q: %v", path, err)
 			}
 		}
