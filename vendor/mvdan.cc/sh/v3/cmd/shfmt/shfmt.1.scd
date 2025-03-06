@@ -16,7 +16,7 @@ directory, all shell scripts found under that directory will be used.
 
 If any EditorConfig files are found, they will be used to apply formatting
 options. If any parser or printer flags are given to the tool, no EditorConfig
-files will be used. A default like *-i=0* can be used for this purpose.
+formatting options will be used. A default like *-i=0* can be used for this purpose.
 
 shfmt's default shell formatting was chosen to be consistent, common, and
 predictable. Some aspects of the format can be configured via printer flags.
@@ -25,11 +25,12 @@ predictable. Some aspects of the format can be configured via printer flags.
 
 ## Generic flags
 
-*-version*
+*--version*
 	Show version and exit.
 
-*-l*, *--list*
-	List files whose formatting differs from shfmt's.
+*-l[=0]*, *--list[=0]*
+	List files whose formatting differs from shfmt's;
+	paths are separated by a newline or a null character if -l=0
 
 *-w*, *--write*
 	Write result to file instead of stdout.
@@ -47,6 +48,19 @@ predictable. Some aspects of the format can be configured via printer flags.
 *-mn*, *--minify*
 	Minify the code to reduce its size (implies *-s*).
 
+*--apply-ignore*
+	Always apply EditorConfig ignore rules.
+
+	When formatting files directly, ignore rules are skipped without this flag.
+	Should be useful to any tools or editors which format stdin or a single file.
+	When printing results to stdout, an ignored file results in no output at all.
+
+*--filename* str
+	Provide a name for the standard input file.
+
+	Use of this flag is necessary for EditorConfig support to work with stdin,
+	since EditorConfig files are found relative to the location of a script.
+
 ## Parser flags
 
 *-ln*, *--language-dialect* <str>
@@ -58,13 +72,10 @@ predictable. Some aspects of the format can be configured via printer flags.
 	If neither come up with a result, *bash* is used as a fallback.
 
 	The filename extension *.sh* is a special case: it implies *posix*,
-	but may be overriden by a valid shell shebang.
+	but may be overridden by a valid shell shebang.
 
 *-p*, *--posix*
 	Shorthand for *-ln=posix*.
-
-*-filename* str
-	Provide a name for the standard input file.
 
 ## Printer flags
 
@@ -74,7 +85,7 @@ predictable. Some aspects of the format can be configured via printer flags.
 *-bn*, *--binary-next-line*
 	Binary ops like *&&* and *|* may start a line.
 
-*-ci*, *--switch-case-indent*
+*-ci*, *--case-indent*
 	Switch cases will be indented.
 
 *-sr*, *--space-redirects*
@@ -83,16 +94,23 @@ predictable. Some aspects of the format can be configured via printer flags.
 *-kp*, *--keep-padding*
 	Keep column alignment paddings.
 
+	This flag is *DEPRECATED* and will be removed in the next major version.
+	For more information, see: https://github.com/mvdan/sh/issues/658
+
 *-fn*, *--func-next-line*
 	Function opening braces are placed on a separate line.
 
 ## Utility flags
 
-*-f*, *--find*
-	Recursively find all shell files and print the paths.
+*-f[=0]*, *--find[=0]*
+	Recursively find all shell files and print the paths;
+	paths are separated by a newline or a null character if -f=0.
 
-*-tojson*
+*--to-json*
 	Print syntax tree to stdout as a typed JSON.
+
+*--from-json*
+	Read syntax tree from stdin as a typed JSON.
 
 # EXAMPLES
 
@@ -105,7 +123,7 @@ For CI, one can use a variant where formatting changes are just shown as diffs:
 	shfmt -d .
 
 The following formatting flags closely resemble Google's shell style defined in
-<https://google.github.io/styleguide/shell.xml>:
+<https://google.github.io/styleguide/shellguide.html>:
 
 	shfmt -i 2 -ci -bn
 
@@ -118,17 +136,27 @@ showing how to set any option:
 indent_style = space
 indent_size = 4
 
-shell_variant      = posix # --language-variant
+# --language-variant
+shell_variant      = posix
 binary_next_line   = true
-switch_case_indent = true  # --case-indent
+# --case-indent
+switch_case_indent = true
 space_redirects    = true
 keep_padding       = true
-function_next_line = true  # --func-next-line
+# --func-next-line
+function_next_line = true
 
-# Ignore the entire "third_party" directory.
+# Ignore the entire "third_party" directory when calling shfmt on directories,
+# such as "shfmt -l -w .". When formatting files directly,
+# like "shfmt -w third_party/foo.sh" or "shfmt --filename=third_party/foo.sh",
+# the ignore logic is applied only when the --apply-ignore flag is given.
 [third_party/**]
 ignore = true
 ```
+
+EditorConfig sections may also use `[[shell]]` or `[[bash]]` to match any shell or bash scripts,
+which is particularly useful when scripts use a shebang but no extension.
+Note that this feature is outside of the EditorConfig spec and may be changed in the future.
 
 shfmt can also replace *bash -n* to check shell scripts for syntax errors. It is
 more exhaustive, as it parses all syntax statically and requires valid UTF-8:
