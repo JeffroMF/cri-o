@@ -1,4 +1,4 @@
-go 1.18
+go 1.23
 
 module github.com/cri-o/cri-o
 
@@ -24,7 +24,7 @@ require (
 	github.com/containers/ocicrypt v1.1.5
 	github.com/containers/podman/v4 v4.2.0-rc2
 	github.com/containers/storage v1.42.0
-	github.com/coreos/go-systemd/v22 v22.3.2
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/cpuguy83/go-md2man v1.0.10
 	github.com/creack/pty v1.1.18
 	github.com/cri-o/ocicni v0.4.0
@@ -65,7 +65,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.9.0
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
-	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8
+	golang.org/x/sys v0.1.0
 	google.golang.org/grpc v1.48.0
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.3
